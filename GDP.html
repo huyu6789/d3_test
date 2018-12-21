@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>世界各国历年GDP及排名变化</title>
+<script src="https://d3js.org/d3.v5.js"></script>
+
+<style type="text/css">
+
+			.area {
+				stroke: none;
+				opacity: 0.6;
+			}
+
+			/*.area:hover {
+				fill: red;
+			}*/
+			.title {
+				font-size: 30px;
+				letter-spacing: 10px;
+				font-family: "sans-serif";
+			}
+			.Stitle{
+				font-size: 14px;
+				letter-spacing: 5px;
+				font-family: "sans-serif";
+			}
+			.contryName{
+				font-size: 14px;
+				font-family: "sans-serif";
+			}
+</style>
+</head>
+
+<body>
+<script>
+	var w = 1300;
+	var h = 600;
+	var padding = 20;
+
+	var svg = d3.select("body")
+				.append("svg")
+				.attr("width",w)
+				.attr("height",h)
+				//.attr("transform", "translate(60,0)");
+
+	var stack = d3.stack().order(d3.stackOrderAscending);
+	var parseTime = d3.timeParse("%Y");
+	var formatTime = d3.timeFormat("%Y年");
+	var colors = d3.scaleOrdinal(d3.schemePaired);
+
+	d3.dsv(",","d3_data/gdp_data_source.csv",function(d,i,cols){
+		var rows = {
+			date : parseTime(d.year)
+		};
+
+		for(var i=1;i<cols.length;i++){
+			if(d[cols[i]]){
+				rows[cols[i]] = +d[cols[i]]/100000000000;
+			}
+			else{
+				rows[cols[i]] = 0;
+			}
+
+		}
+		return rows;
+	}).then(function(dataset){
+		//console.log(dataset);
+		var keys = dataset.columns;
+		keys.shift();
+		stack.keys(keys);
+		var series = stack(dataset);
+
+		//console.log(series);
+
+
+		for(var z=0; z<dataset.length; z++){
+
+			var name = keys;
+			var value = [];
+			var lowPoint = 0;
+			var hightPoint = 0;
+			for(var a=0; a<name.length; a++){
+				value.push(dataset[z][name[a]]);
+			}
+
+			for(var m=0; m<value.length; m++){
+				for(var n=m; n<value.length; n++){
+					var Svalue,Sname;
+					if(value[m]>value[n]){
+						Svalue = value[m];
+						value[m] = value[n];
+						value[n] = Svalue;
+
+						Sname = name[m]
+						name[m] = name[n]
+						name[n] = Sname;
+					}
+				}
+			}
+
+
+			for(var x=0;x<name.length; x++){
+				var thisName = name[x];
+				//alert(name[x]+":"+value[x]);
+				hightPoint = lowPoint+value[x];
+				for(var y=0; y<series.length; y++){
+					if(thisName == series[y].key){
+						series[y][z][0]=lowPoint;
+						series[y][z][1]=hightPoint;
+						/*console.log(thisName);
+						console.log(series[y].key)*/
+					}
+				}
+				//console.log("["+lowPoint+","+hightPoint+"]");
+				lowPoint = hightPoint;
+			}
+
+			//console.log(value);
+			//console.log(name);
+		}
+
+
+
+		var xScale = d3.scaleTime()
+					   .domain([d3.min(dataset, function(d) { return d.date; }),
+								d3.max(dataset, function(d) { return d.date; })])
+					   .range([20,w-40]);
+		var yScale = d3.scaleLinear()
+					   .domain([0,d3.max(dataset, function(d) {
+							var sum = 0;
+							for (var i = 0; i < keys.length; i++) {
+								sum += d[keys[i]];
+							};
+
+							return sum;
+							})
+						])
+						.range([h - 20, 10]);
+
+		var xAxis = d3.axisBottom().scale(xScale).ticks(10).tickFormat(formatTime);
+		var yAxis = d3.axisLeft().scale(yScale).ticks(8);
+
+		var area = d3.area()
+							.x(function(d) { return xScale(d.data.date); })
+							.y0(function(d) { return yScale(d[0]); })
+							.y1(function(d) { return yScale(d[1]); })
+							.curve(d3.curveCardinal);
+
+		svg.append("g")
+			.selectAll("text")
+			.data(series)
+			.enter()
+			.append("text")
+			.attr("class","contryName")
+			//.attr("transform", "translate(-10,0)")
+			.attr("x",function(d){
+				return w-40;
+			})
+			.attr("y",function(d){
+				var lastNum = d.length-1;
+				var Ylocation = (yScale(d[lastNum][1])+yScale(d[lastNum][0]))/2;
+
+				return Ylocation;
+			})
+			.text(function(d,i){
+				console.log(d);
+				var lastNum = d.length-1;
+				if((d[lastNum][1]-d[lastNum][0])>1.55){
+					return d.key;
+				}else{
+					return "";
+				}
+			});
+
+
+
+
+		svg.selectAll("path")
+					.data(series)
+					.enter()
+					.append("path")
+					.attr("class", "area")
+					.attr("d", area)
+					.attr("fill", function(d, i) {
+						//console.log(d);
+						return colors(i);
+					})
+					.on("mouseover",function(d){
+						d3.selectAll(".area").attr("fill","#ADADAD");
+						d3.select(this).attr("fill","red").attr("opacity","0.3");
+					})
+					.on("mouseout",function(d){
+						d3.selectAll(".area").attr("fill",function(d,i){
+							return colors(i);
+						}).attr("opacity","0.6");
+					});
+
+
+				svg.append("g")
+					.attr("class", "axis")
+					.attr("transform", "translate(0," + (h - 20) + ")")
+					.call(xAxis);
+
+
+
+				var yTitle = svg.append("g")
+					.attr("class", "axis")
+					.attr("transform", "translate(20,0)")
+					.call(yAxis)
+
+				yTitle.append("text")
+					.text("万亿 (美元)")
+					//.attr("transform","rotate(90)")
+					.attr("y", 16)
+					.attr("x",30)
+					.attr("dy", ".71em")
+					.style("text-anchor", "middle")
+					.style("fill", "#000")
+
+				var title = svg.append("g")
+					.attr("class","title")
+					.attr("transform", "translate(260,40)");
+
+			   title.append("text")
+					.text("世界各国历年GDP及排名变化")
+					.append("text");
+
+			   title.append("text")
+			   		.attr("class","Stitle")
+					.text("数据来源|世界银行")
+			   		.attr("x","150")
+					.attr("y","30");
+
+
+	})
+
+
+
+	</script>
+
+
+</body>
+</html>
